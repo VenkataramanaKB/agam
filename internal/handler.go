@@ -13,36 +13,13 @@ import (
 	"strconv"
 )
 
-// CreateUserPayload captures the simple fields needed to register a user.
-type CreateUserPayload struct {
-	Name     string `json:"name" example:"Alice"`
-	Email    string `json:"email" example:"alice@example.com"`
-	Phone    int    `json:"phone" example:"9199990000"`
-	Password string `json:"password" example:"Secret123!"`
-}
-
-type CreateVaultPayload struct {
-	Name     string 
-	Type    string 
-	UserID int64
-}
-
-// UserResponse is returned after user creation without nested relations.
-type UserResponse struct {
-	ID               int64     `json:"id"`
-	Name             string    `json:"name"`
-	Email            string    `json:"email"`
-	Phone            int       `json:"phone"`
-	CreatedTimestamp time.Time `json:"createdTimestamp"`
-}
-
 // CreateUserHandler registers a new user account.
 // @Summary Register user
 // @Description Creates a new user account with the provided credentials.
 // @Tags users
 // @Accept json
 // @Produce json
-// @Param CreateUserPayload body CreateUserPayload true "User payload"
+// @Param UserInput body UserInput true "User payload"
 // @Success 201 {object} UserResponse
 // @Failure 400 {string} string
 // @Router /users [post]
@@ -50,7 +27,7 @@ func CreateUserHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		// Parse incoming JSON body
-		var input CreateUserPayload
+		var input UserInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			http.Error(w, "invalid JSON body", http.StatusBadRequest)
 			return
@@ -68,6 +45,32 @@ func CreateUserHandler(db *gorm.DB) http.HandlerFunc {
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
+		}
+
+		vaults := []Vault{
+			{
+				Name:   "Memories",
+				Type:   "images",
+				UserId: user.ID,
+			},
+			{
+				Name:   "Thoughts",
+				Type:   "texts",
+				UserId: user.ID,
+			},
+			{
+				Name:   "Echoes",
+				Type:   "audios",
+				UserId: user.ID,
+			},
+		}
+
+		for _, v := range vaults {
+			_, err := CreateVault(db, v)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusBadRequest)
+				return
+			}
 		}
 
 		// Respond with created user (no nested data)
@@ -91,13 +94,13 @@ func CreateUserHandler(db *gorm.DB) http.HandlerFunc {
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param vault body Vault true "Vault payload"
+// @Param VaultInput body VaultInput true "Vault payload"
 // @Success 201 {object} Vault
 // @Failure 400 {string} string
 // @Router /vaults/create [post]
 func CreateVaultHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var input CreateVaultPayload
+		var input VaultInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			http.Error(w, "invalid JSON body", http.StatusBadRequest)
 			return
@@ -423,19 +426,24 @@ func DeleteFileHandler(db *gorm.DB, minioClient *minio.Client, bucketName string
 // @Security BearerAuth
 // @Accept json
 // @Produce json
-// @Param device body Device true "Device payload"
+// @Param DeviceInput body DeviceInput true "Device payload"
 // @Success 201 {object} Device
 // @Failure 400 {string} string
 // @Router /devices/register [post]
 func RegisterDeviceHandler(db *gorm.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		var input Device
+		var input DeviceInput
 		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
 			http.Error(w, "invalid JSON body", http.StatusBadRequest)
 			return
 		}
 
-		device, err := RegisterDevice(db, input)
+		deviceInput := Device{
+			Name: input.Name,
+			UserID: input.UserID,
+		}
+
+		device, err := RegisterDevice(db, deviceInput)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

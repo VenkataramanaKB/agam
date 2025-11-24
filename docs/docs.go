@@ -17,6 +17,11 @@ const docTemplate = `{
     },
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
+    "security": [
+        {
+            "BearerAuth": []
+        }
+    ],
     "paths": {
         "/auth/login": {
             "post": {

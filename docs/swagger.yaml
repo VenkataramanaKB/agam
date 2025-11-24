@@ -1,4 +1,6 @@
 basePath: /
+security:
+- BearerAuth: []
 definitions:
   internal.CreateUserPayload:
     properties:

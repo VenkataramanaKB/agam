@@ -13,6 +13,11 @@
         "version": "1.0"
     },
     "basePath": "/",
+    "security": [
+        {
+            "BearerAuth": []
+        }
+    ],
     "paths": {
         "/auth/login": {
             "post": {
