@@ -1,3 +1,13 @@
+// @title Agam API
+// @version 1.0
+// @description API documentation for the Agam secure vault service.
+// @schemes http
+// @BasePath /
+// @contact.name API Support
+// @contact.email support@agam.local
+// @securityDefinitions.apikey BearerAuth
+// @in header
+// @name Authorization
 package main
 
 import (
@@ -5,6 +15,7 @@ import (
 	"net/http"
 
 	"github.com/joho/godotenv"
+	_ "github.com/venkataramanakb/agam/docs"
 	"github.com/venkataramanakb/agam/internal"
 )
 

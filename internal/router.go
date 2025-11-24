@@ -5,11 +5,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/minio/minio-go/v7"
+	httpSwagger "github.com/swaggo/http-swagger"
 	"gorm.io/gorm"
 )
 
 func SetupRouter(db *gorm.DB, minio *minio.Client, bucketName string, jwtSecret string, cfg *Config) http.Handler {
 	r := chi.NewRouter()
+
+	r.Get("/swagger/*", httpSwagger.Handler())
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("ok"))

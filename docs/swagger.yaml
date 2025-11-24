@@ -1,0 +1,499 @@
+basePath: /
+definitions:
+  internal.CreateUserPayload:
+    properties:
+      email:
+        example: alice@example.com
+        type: string
+      name:
+        example: Alice
+        type: string
+      password:
+        example: Secret123!
+        type: string
+      phone:
+        example: 9199990000
+        type: integer
+    type: object
+  internal.Device:
+    properties:
+      createdTimestamp:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      syncLogs:
+        items:
+          $ref: '#/definitions/internal.SyncLog'
+        type: array
+      user:
+        $ref: '#/definitions/internal.User'
+      userID:
+        type: integer
+    type: object
+  internal.File:
+    properties:
+      date:
+        type: string
+      folderID:
+        type: string
+      id:
+        type: string
+      logs:
+        items:
+          $ref: '#/definitions/internal.SyncLog'
+        type: array
+      minioKey:
+        type: string
+      name:
+        type: string
+      size:
+        type: integer
+      thumbnail:
+        type: string
+      time:
+        type: string
+      type:
+        type: string
+      vault:
+        $ref: '#/definitions/internal.Vault'
+      vaultID:
+        type: string
+    type: object
+  internal.LoginRequest:
+    properties:
+      email:
+        type: string
+      password:
+        type: string
+    type: object
+  internal.LoginResponse:
+    properties:
+      message:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  internal.SyncLog:
+    properties:
+      action:
+        type: string
+      device:
+        $ref: '#/definitions/internal.Device'
+      deviceID:
+        type: string
+      file:
+        $ref: '#/definitions/internal.File'
+      fileID:
+        type: string
+      folderID:
+        type: string
+      id:
+        type: string
+      lastUpdated:
+        type: string
+      vault:
+        $ref: '#/definitions/internal.Vault'
+      vaultID:
+        type: string
+    type: object
+  internal.User:
+    properties:
+      createdTimestamp:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      password:
+        type: string
+      phone:
+        type: integer
+    type: object
+  internal.UserResponse:
+    properties:
+      createdTimestamp:
+        type: string
+      email:
+        type: string
+      id:
+        type: integer
+      name:
+        type: string
+      phone:
+        type: integer
+    type: object
+  internal.Vault:
+    properties:
+      createdTimestamp:
+        type: string
+      files:
+        items:
+          $ref: '#/definitions/internal.File'
+        type: array
+      id:
+        type: string
+      logs:
+        items:
+          $ref: '#/definitions/internal.SyncLog'
+        type: array
+      name:
+        type: string
+      type:
+        type: string
+      userId:
+        type: integer
+    type: object
+  internal.VerifyOTPRequest:
+    properties:
+      otp:
+        type: string
+      user_id:
+        type: integer
+    type: object
+  internal.VerifyOTPResponse:
+    properties:
+      email:
+        type: string
+      token:
+        type: string
+      user_id:
+        type: integer
+    type: object
+info:
+  contact:
+    email: support@agam.local
+    name: API Support
+  description: API documentation for the Agam secure vault service.
+  title: Agam API
+  version: "1.0"
+paths:
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login payload
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/internal.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal.LoginResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Initiate login
+      tags:
+      - auth
+  /auth/verify-otp:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: OTP payload
+        in: body
+        name: payload
+        required: true
+        schema:
+          $ref: '#/definitions/internal.VerifyOTPRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal.VerifyOTPResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Verify OTP
+      tags:
+      - auth
+  /devices/register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Device payload
+        in: body
+        name: device
+        required: true
+        schema:
+          $ref: '#/definitions/internal.Device'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal.Device'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Register device
+      tags:
+      - devices
+  /devices/sync:
+    get:
+      parameters:
+      - description: Device ID
+        in: query
+        name: device_id
+        required: true
+        type: string
+      - description: RFC3339 timestamp
+        in: query
+        name: last_sync_time
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal.SyncLog'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Sync changes
+      tags:
+      - devices
+  /files/delete:
+    delete:
+      parameters:
+      - description: File ID
+        in: query
+        name: file_id
+        required: true
+        type: string
+      - description: Vault ID
+        in: query
+        name: vault_id
+        required: true
+        type: string
+      - description: Device ID
+        in: query
+        name: device_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete file
+      tags:
+      - files
+  /files/upload:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Image file
+        in: formData
+        name: file
+        required: true
+        type: file
+      - description: Vault ID
+        in: formData
+        name: vault_id
+        required: true
+        type: string
+      - description: Folder ID
+        in: formData
+        name: folder_id
+        type: string
+      - description: Device ID
+        in: formData
+        name: device_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal.File'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Upload file
+      tags:
+      - files
+  /users:
+    post:
+      consumes:
+      - application/json
+      description: Creates a new user account with the provided credentials.
+      parameters:
+      - description: User payload
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/internal.CreateUserPayload'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal.UserResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      summary: Register user
+      tags:
+      - users
+  /vaults:
+    get:
+      parameters:
+      - description: Owner user ID
+        in: query
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal.Vault'
+            type: array
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: List vaults
+      tags:
+      - vaults
+  /vaults/create:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Vault payload
+        in: body
+        name: vault
+        required: true
+        schema:
+          $ref: '#/definitions/internal.Vault'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/internal.Vault'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Create vault
+      tags:
+      - vaults
+  /vaults/delete:
+    delete:
+      parameters:
+      - description: Vault ID
+        in: query
+        name: vault_id
+        required: true
+        type: string
+      - description: Owner user ID
+        in: query
+        name: user_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Delete vault
+      tags:
+      - vaults
+  /vaults/update:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Vault ID
+        in: query
+        name: vault_id
+        required: true
+        type: string
+      - description: Owner user ID
+        in: query
+        name: user_id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: updates
+        required: true
+        schema:
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal.Vault'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+      security:
+      - BearerAuth: []
+      summary: Update vault
+      tags:
+      - vaults
+schemes:
+- http
+securityDefinitions:
+  BearerAuth:
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

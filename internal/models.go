@@ -14,9 +14,9 @@ type User struct {
 	Email            string    `gorm:"type:text;not null"`
 	Phone            int       `gorm:"unique;not null"`
 	Password         string    `gorm:"type:text;not null"`
-	CreatedTimestamp time.Time `gorm:"autoCreateTime"`
+	CreatedTimestamp time.Time `gorm:"type:timestamp;autoCreateTime"`
 
-	Devices []Device `gorm:"foreignKey:UserID"`
+	Devices []Device `gorm:"foreignKey:UserID" json:"-"`
 }
 
 // Vault represents the vault table
