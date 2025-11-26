@@ -409,7 +409,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/internal.Vault'
+              $ref: '#/definitions/internal.VaultInput'
             type: array
         "400":
           description: Bad Request

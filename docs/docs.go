@@ -366,7 +366,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/internal.Vault"
+                                "$ref": "#/definitions/internal.VaultInput"
                             }
                         }
                     },

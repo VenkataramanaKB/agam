@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"time"
-
+	"strings"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"gorm.io/gorm"
@@ -61,6 +61,11 @@ func CreateUserHandler(db *gorm.DB) http.HandlerFunc {
 			{
 				Name:   "Echoes",
 				Type:   "audios",
+				UserId: user.ID,
+			},
+			{
+				Name:   "Documents",
+				Type:   "documents",
 				UserId: user.ID,
 			},
 		}
@@ -222,7 +227,7 @@ func DeleteVaultHandler(db *gorm.DB) http.HandlerFunc {
 // @Security BearerAuth
 // @Produce json
 // @Param user_id query string true "Owner user ID"
-// @Success 200 {array} Vault
+// @Success 200 {array} VaultInput
 // @Failure 400 {string} string
 // @Router /vaults [get]
 func ListVaultsHandler(db *gorm.DB) http.HandlerFunc {
@@ -250,6 +255,52 @@ func ListVaultsHandler(db *gorm.DB) http.HandlerFunc {
 	}
 }
 
+// Thumbnail lists all thumbnails for a vault.
+// @Summary List vaults
+// @Tags vaults
+// @Security BearerAuth
+// @Produce json
+// @Param userId query string true "Owner user ID"
+// @Param vaultId query string true "Vault ID"
+// @Success 200 {array} VaultInput
+// @Failure 400 {string} string
+// @Router /thumbnail [get]
+// func GetVaultThumbnail(db *gorm.DB) http.HandlerFunc {
+// 	return func(w http.ResponseWriter, r *http.Request) {
+		
+// 		userIDStr := r.URL.Query().Get("userId")
+
+// 		if userIDStr == "" {
+// 			http.Error(w, "user_id is required", http.StatusBadRequest)
+// 			return
+// 		}
+
+// 		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+
+// 		if err != nil {
+// 			http.Error(w, "invalid user_id", http.StatusBadRequest)
+// 			return
+// 		}
+
+
+// 		vaultIDStr := r.FormValue("vault_id")
+// 		vaultID, err := uuid.Parse(vaultIDStr)
+// 		if err != nil {
+// 			http.Error(w, "invalid vault_id", http.StatusBadRequest)
+// 			return
+// 		}
+
+// 		thumbnail, err := GetThumbnail(db, userID, vaultID)
+// 		if err != nil {
+// 			http.Error(w, err.Error(), http.StatusInternalServerError)
+// 			return
+// 		}
+
+// 		w.Header().Set("Content-Type", "application/json")
+// 		json.NewEncoder(w).Encode(thu)
+// 	}
+// }
+
 // UploadFileHandler uploads an image into a vault.
 // @Summary Upload file
 // @Tags files
@@ -263,7 +314,7 @@ func ListVaultsHandler(db *gorm.DB) http.HandlerFunc {
 // @Success 201 {object} File
 // @Failure 400 {string} string
 // @Router /files/upload [post]
-func UploadFileHandler(db *gorm.DB, minioClient *minio.Client,) http.HandlerFunc {
+func UploadFileHandler(db *gorm.DB, minioClient *minio.Client ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse multipart form (max 32MB)
 		err := r.ParseMultipartForm(32 << 20)
@@ -398,7 +449,7 @@ func UploadFileHandler(db *gorm.DB, minioClient *minio.Client,) http.HandlerFunc
 // @Success 204 "No Content"
 // @Failure 400 {string} string
 // @Router /files/delete [delete]
-func DeleteFileHandler(db *gorm.DB, minioClient *minio.Client,string) http.HandlerFunc {
+func DeleteFileHandler(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fileIDStr := r.URL.Query().Get("file_id")
 		vaultIDStr := r.URL.Query().Get("vault_id")

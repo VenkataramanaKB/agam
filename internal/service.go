@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"time"
-
+    "github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+	"strings"
 )
 
 
@@ -107,12 +108,19 @@ func DeleteVault(db *gorm.DB, vaultID uuid.UUID, userID int64) error {
 	return nil
 }
 
-func ListVaults(db *gorm.DB, userID int64) ([]Vault, error) {
-    var vaults []Vault
+func ListVaults(db *gorm.DB, userID int64) ([]VaultResponse, error) {
+    var vaults []VaultResponse
 
     // Fetch all vaults belonging to the user
-    if err := db.Where("user_id = ?", userID).Find(&vaults).Error; err != nil {
-        return nil, fmt.Errorf("failed to fetch vaults: %w", err)
+    err := db.
+			Model(&Vault{}).
+			Select("id", "name", "type", "user_id").
+			Where("user_id = ?", userID).
+			Scan(&vaults).
+			Error
+			
+	if err != nil {
+     return nil, fmt.Errorf("failed to fetch vaults: %w", err)
     }
 
     return vaults, nil
@@ -145,16 +153,17 @@ func UploadFile(db *gorm.DB, minioClient *minio.Client, input File, fileData []b
 		return nil, errors.New("vault not found")
 	}
 	
+	id := uuid.New().String()
 	// Generate unique key for MinIO storage
-	fileKey := fmt.Sprintf("%s/%s/%s", input.VaultID.String(), uuid.New().String(), input.Name)
-	
+	fileKey  := fmt.Sprintf("files/%s/%s/%s", input.VaultID.String(), id, input.Name)
+			
 	var currentDevice Device;
 	if err := db.Where("id = ?", deviceID).First(&currentDevice).Error; err != nil {
 		return nil, errors.New("Device not found")
 	}
 
 	// Derive user bucket
-	userBucket := fmt.Sprintf("user-%s", currentDevice.UserID.String())
+	userBucket := fmt.Sprintf("user-%d", currentDevice.UserID)
 
 	// Create bucket if not exists
 	exists, err := minioClient.BucketExists(ctx, userBucket)
@@ -167,8 +176,31 @@ func UploadFile(db *gorm.DB, minioClient *minio.Client, input File, fileData []b
 		}
 	}
 	
+	// Check if the file is an image
+	isImage := strings.HasPrefix(contentType, "image/")
+
+	var thumbKey string
+
+	if isImage {
+		thumbKey = fmt.Sprintf("thumbnails/%s/%s/%s_thumb.jpg", input.VaultID.String(), id, input.Name)
+
+		thumbData, err := generateThumbnail(fileData)
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate thumbnail: %w", err)
+		}
+
+		_, err = minioClient.PutObject(ctx, userBucket, thumbKey, bytes.NewReader(thumbData), int64(len(thumbData)), minio.PutObjectOptions{
+			ContentType: "image/jpeg",
+		})
+		if err != nil {
+			return nil, fmt.Errorf("failed to upload thumbnail to MinIO: %w", err)
+		}
+
+		input.Thumbnail = thumbKey
+	}
+
 	// Upload to MinIO
-	_, err := minioClient.PutObject(ctx, userBucket, fileKey, bytes.NewReader(fileData), int64(len(fileData)), minio.PutObjectOptions{
+	_, err = minioClient.PutObject(ctx, userBucket, fileKey, bytes.NewReader(fileData), int64(len(fileData)), minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	if err != nil {
@@ -223,11 +255,11 @@ func DeleteFile(db *gorm.DB, minioClient *minio.Client, fileID uuid.UUID, vaultI
 
 	var currentDevice Device;
 	if err := db.Where("id = ?", deviceID).First(&currentDevice).Error; err != nil {
-		return nil, errors.New("Device not found")
+		return errors.New("Device not found")
 	}
 
 	// Derive user bucket
-	userBucket := fmt.Sprintf("user-%s", currentDevice.UserID.String())
+	userBucket := fmt.Sprintf("user-%s", currentDevice.UserID)
 
 	// Delete from MinIO
 	ctx := context.Background()
@@ -312,5 +344,22 @@ func SyncChanges(db *gorm.DB, deviceID uuid.UUID, lastSyncTime *time.Time) ([]Sy
 	}
 
 	return responses, nil
+}
+
+func generateThumbnail(data []byte) ([]byte, error) {
+    img, err := imaging.Decode(bytes.NewReader(data))
+    if err != nil {
+        return nil, err
+    }
+
+    thumb := imaging.Resize(img, 300, 0, imaging.Lanczos)
+
+    buf := new(bytes.Buffer)
+    err = imaging.Encode(buf, thumb, imaging.JPEG)
+    if err != nil {
+        return nil, err
+    }
+
+    return buf.Bytes(), nil
 }
 

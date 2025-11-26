@@ -2,6 +2,7 @@ package internal
 
 import (
 	"time"
+	"github.com/google/uuid"
 )
 
 
@@ -15,6 +16,13 @@ type UserInput struct {
 }
 
 type VaultInput struct {
+	Name     string 
+	Type    string 
+	UserID int64
+}
+
+type VaultResponse struct {
+	ID		uuid.UUID
 	Name     string 
 	Type    string 
 	UserID int64
