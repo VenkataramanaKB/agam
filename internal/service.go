@@ -5,18 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
+	"sort"
+	"strings"
 	"time"
-    "github.com/disintegration/imaging"
+
+	"github.com/disintegration/imaging"
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
-	"strings"
-	"sort"
-	"log"
-
 )
-
 
 func CreateUser(db *gorm.DB, input User) (*User, error) {
 
@@ -63,6 +62,7 @@ func CreateVault(db *gorm.DB, input Vault) (*Vault, error) {
 
 	// --- Create vault ---
 	input.ID = uuid.New()
+	input.Key = thumbKey // Save the MinIO object key into the Thumbnail struct
 	input.CreatedTimestamp = time.Now()
 
 	if err := db.Create(&input).Error; err != nil {
@@ -112,26 +112,27 @@ func DeleteVault(db *gorm.DB, vaultID uuid.UUID, userID int64) error {
 }
 
 func ListVaults(db *gorm.DB, userID int64) ([]VaultResponse, error) {
-    var vaults []VaultResponse
+	var vaults []VaultResponse
 
-    // Fetch all vaults belonging to the user
-    err := db.
-			Model(&Vault{}).
-			Select("id", "name", "type", "user_id").
-			Where("user_id = ?", userID).
-			Scan(&vaults).
-			Error
-			
+	// Fetch all vaults belonging to the user
+	err := db.
+		Model(&Vault{}).
+		Select("id", "name", "type", "user_id").
+		Where("user_id = ?", userID).
+		Scan(&vaults).
+		Error
+
 	if err != nil {
-     return nil, fmt.Errorf("failed to fetch vaults: %w", err)
-    }
+		return nil, fmt.Errorf("failed to fetch vaults: %w", err)
+	}
 
-    return vaults, nil
+	return vaults, nil
 }
 
 func RegisterDevice(db *gorm.DB, input Device) (*Device, error) {
 	// Verify user exists
 	var user User
+	fmt.Println(input.UserID)
 	if err := db.Where("id = ?", input.UserID).First(&user).Error; err != nil {
 		return nil, errors.New("user not found")
 	}
@@ -148,19 +149,19 @@ func RegisterDevice(db *gorm.DB, input Device) (*Device, error) {
 }
 
 func UploadFile(db *gorm.DB, minioClient *minio.Client, input File, fileData []byte, contentType string, deviceID uuid.UUID) (*File, error) {
-	
+
 	ctx := context.Background()
 	// Verify vault exists
 	var vault Vault
 	if err := db.Where("id = ?", input.VaultID).First(&vault).Error; err != nil {
 		return nil, errors.New("vault not found")
 	}
-	
+
 	id := uuid.New().String()
 	// Generate unique key for MinIO storage
-	fileKey  := fmt.Sprintf("files/%s/%s/%s", input.VaultID.String(), id, input.Name)
-			
-	var currentDevice Device;
+	fileKey := fmt.Sprintf("files/%s/%s/%s", input.VaultID.String(), id, input.Name)
+
+	var currentDevice Device
 	if err := db.Where("id = ?", deviceID).First(&currentDevice).Error; err != nil {
 		return nil, errors.New("Device not found")
 	}
@@ -178,11 +179,11 @@ func UploadFile(db *gorm.DB, minioClient *minio.Client, input File, fileData []b
 			return nil, fmt.Errorf("failed creating bucket: %w", err)
 		}
 	}
-	
+
 	// Check if the file is an image
 	isImage := strings.HasPrefix(contentType, "image/")
 	log.Printf(contentType)
-	log.Printf(fmt.Sprintf("%v",isImage))
+	log.Printf(fmt.Sprintf("%v", isImage))
 
 	var thumbKey string
 
@@ -244,7 +245,6 @@ func UploadFile(db *gorm.DB, minioClient *minio.Client, input File, fileData []b
 		}
 	}
 
-
 	return &input, nil
 }
 
@@ -258,7 +258,7 @@ func DeleteFile(db *gorm.DB, minioClient *minio.Client, fileID uuid.UUID, vaultI
 	// Store file info before deletion for sync log
 	folderID := file.FolderID
 
-	var currentDevice Device;
+	var currentDevice Device
 	if err := db.Where("id = ?", deviceID).First(&currentDevice).Error; err != nil {
 		return errors.New("Device not found")
 	}
@@ -281,7 +281,6 @@ func DeleteFile(db *gorm.DB, minioClient *minio.Client, fileID uuid.UUID, vaultI
 	if err := db.Delete(&file).Error; err != nil {
 		return fmt.Errorf("failed to delete file from database: %w", err)
 	}
-
 
 	// Create sync logs for all other devices of the same user (excluding the device that made the change)
 	var otherDevices []Device
@@ -318,12 +317,12 @@ func SyncChanges(db *gorm.DB, deviceID uuid.UUID, lastSyncTime *time.Time) ([]Sy
 
 	// Build query for sync logs
 	query := db.Where("device_id = ?", deviceID)
-	log.Printf(fmt.Sprintf("%v",query))
-	
+	log.Printf(fmt.Sprintf("%v", query))
+
 	// If lastSyncTime is provided, only get logs after that time
 	if lastSyncTime != nil {
 		query = query.Where("last_updated > ?", *lastSyncTime)
-		log.Printf(fmt.Sprintf("%v",query))
+		log.Printf(fmt.Sprintf("%v", query))
 	}
 
 	// Order by last_updated ascending
@@ -334,12 +333,12 @@ func SyncChanges(db *gorm.DB, deviceID uuid.UUID, lastSyncTime *time.Time) ([]Sy
 		return nil, fmt.Errorf("failed to fetch sync logs: %w", err)
 	}
 
-	log.Printf(fmt.Sprintf("%v",len(syncLogs)))
+	log.Printf(fmt.Sprintf("%v", len(syncLogs)))
 	// Build response with file details
 	responses := make([]SyncLogResponse, len(syncLogs))
 	for i, log := range syncLogs {
 		response := SyncLogResponse{SyncLog: log}
-		
+
 		// If action is create or update and file_id is set, fetch file details
 		if (log.Action == "create" || log.Action == "update") && log.FileID != nil {
 			var file File
@@ -347,7 +346,7 @@ func SyncChanges(db *gorm.DB, deviceID uuid.UUID, lastSyncTime *time.Time) ([]Sy
 				response.File = &file
 			}
 		}
-		
+
 		responses[i] = response
 	}
 
@@ -355,20 +354,20 @@ func SyncChanges(db *gorm.DB, deviceID uuid.UUID, lastSyncTime *time.Time) ([]Sy
 }
 
 func generateThumbnail(data []byte) ([]byte, error) {
-    img, err := imaging.Decode(bytes.NewReader(data))
-    if err != nil {
-        return nil, err
-    }
+	img, err := imaging.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
 
-    thumb := imaging.Resize(img, 300, 0, imaging.Lanczos)
+	thumb := imaging.Resize(img, 300, 0, imaging.Lanczos)
 
-    buf := new(bytes.Buffer)
-    err = imaging.Encode(buf, thumb, imaging.JPEG)
-    if err != nil {
-        return nil, err
-    }
+	buf := new(bytes.Buffer)
+	err = imaging.Encode(buf, thumb, imaging.JPEG)
+	if err != nil {
+		return nil, err
+	}
 
-    return buf.Bytes(), nil
+	return buf.Bytes(), nil
 }
 
 // Service to generate thumbnails for image vaults
@@ -407,12 +406,13 @@ func GetThumbnail(db *gorm.DB, minioClient *minio.Client, vaultID uuid.UUID, use
 				return nil, fmt.Errorf("failed to generate thumbnail URL: %w", err)
 			}
 			thumb.ThumbnailURL = presignedURL.String()
+			// Log the generated thumbnail URL for debugging (user, vault, file)
+			log.Printf("thumbnail presign: user=%d vault=%s file=%s url=%s", userID, vaultID.String(), f.ID.String(), presignedURL.String())
 		}
 
 		day := f.Date.Format("2006-01-02")
 		dateMap[day] = append(dateMap[day], thumb)
 	}
-
 
 	// Convert map → []ThumbnailDate (sorted)
 	var grouped []ThumbnailDate
@@ -435,4 +435,3 @@ func GetThumbnail(db *gorm.DB, minioClient *minio.Client, vaultID uuid.UUID, use
 		Thumbnails: grouped,
 	}, nil
 }
-

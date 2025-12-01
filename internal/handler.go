@@ -1,18 +1,24 @@
 package internal
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"path/filepath"
-	"time"
+	"strconv"
 	"strings"
+	"time"
+
+	"net/url"
+
 	"github.com/google/uuid"
 	"github.com/minio/minio-go/v7"
+	"github.com/minio/minio-go/v7/pkg/credentials"
 	"gorm.io/gorm"
-	"strconv"
-	"log"
 )
 
 // CreateUserHandler starts the user registration flow by sending an email OTP.
@@ -153,15 +159,18 @@ func CreateVaultHandler(db *gorm.DB) http.HandlerFunc {
 		}
 
 		inputVault := Vault{
-			Name: input.Name,
-			Type: input.Type,
-			UserId : input.UserID,
+			Name:   input.Name,
+			Type:   input.Type,
+			UserId: input.UserID,
 		}
 		vault, err := CreateVault(db, inputVault)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+
+		// Log created vault for debugging
+		log.Printf("created vault: id=%s name=%s user_id=%d", vault.ID.String(), vault.Name, vault.UserId)
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -291,6 +300,9 @@ func ListVaultsHandler(db *gorm.DB) http.HandlerFunc {
 			return
 		}
 
+		// Log vault count for this user to aid debugging
+		log.Printf("list vaults: user_id=%d count=%d", userID, len(vaults))
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(vaults)
 	}
@@ -306,9 +318,9 @@ func ListVaultsHandler(db *gorm.DB) http.HandlerFunc {
 // @Success 200 {array} VaultInput
 // @Failure 400 {string} string
 // @Router /thumbnail [get]
-func GetVaultThumbnail(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc {
+func GetVaultThumbnail(db *gorm.DB, minioClient *minio.Client, cfg *Config) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		
+
 		userIDStr := r.URL.Query().Get("userId")
 
 		if userIDStr == "" {
@@ -324,18 +336,46 @@ func GetVaultThumbnail(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc 
 		}
 
 		vaultIDStr := r.URL.Query().Get("vaultId")
-        if vaultIDStr == "" {
-            http.Error(w, "vault_id is required", http.StatusBadRequest)
-            return
-        }
+		if vaultIDStr == "" {
+			http.Error(w, "vault_id is required", http.StatusBadRequest)
+			return
+		}
 
-        vaultID, err := uuid.Parse(vaultIDStr)
-        if err != nil {
-            log.Printf("%v", err)
-            http.Error(w, "invalid vault_id", http.StatusBadRequest)
-            return
-        }
+		vaultID, err := uuid.Parse(vaultIDStr)
+		if err != nil {
+			log.Printf("%v", err)
+			http.Error(w, "invalid vault_id", http.StatusBadRequest)
+			return
+		}
 
+		// If client requests emulator signing, create a temp minio client
+		// that will sign thumbnail URLs for the emulator host.
+		if r.URL.Query().Get("emulator") == "1" {
+			tmpClient, err := minio.New("10.0.2.2:9000", &minio.Options{
+				Creds:  credentials.NewStaticV4(cfg.MinioKey, cfg.MinioSecret, ""),
+				Secure: false,
+			})
+			if err != nil {
+				log.Printf("thumbnail error: failed to create temp minio client: %v", err)
+				http.Error(w, "failed to generate thumbnails", http.StatusInternalServerError)
+				return
+			}
+			thumbnail, err := GetThumbnail(db, tmpClient, vaultID, userID)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			// Debug log: report how many thumbnail groups and total items were found
+			var totalItems int
+			for _, g := range thumbnail.Thumbnails {
+				totalItems += len(g.Objects)
+			}
+			log.Printf("thumbnail response: user=%d vault=%s groups=%d items=%d", userID, vaultID.String(), len(thumbnail.Thumbnails), totalItems)
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(thumbnail)
+			return
+		}
 
 		thumbnail, err := GetThumbnail(db, minioClient, vaultID, userID)
 		if err != nil {
@@ -343,8 +383,184 @@ func GetVaultThumbnail(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc 
 			return
 		}
 
+		// Debug log: report how many thumbnail groups and total items were found
+		var totalItems int
+		for _, g := range thumbnail.Thumbnails {
+			totalItems += len(g.Objects)
+		}
+		log.Printf("thumbnail response: user=%d vault=%s groups=%d items=%d", userID, vaultID.String(), len(thumbnail.Thumbnails), totalItems)
+
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(thumbnail)
+	}
+}
+
+// GetFileHandler returns a presigned URL for a file
+// @Summary Get file URL
+// @Tags files
+// @Security BearerAuth
+// @Produce json
+// @Param file_id query string true "File ID"
+// @Param user_id query string true "Owner user ID"
+// @Success 200 {object} map[string]string
+// @Failure 400 {string} string
+// @Router /files/download [get]
+func GetFileHandler(db *gorm.DB, minioClient *minio.Client, cfg *Config) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userIDStr := r.URL.Query().Get("user_id")
+		if userIDStr == "" {
+			http.Error(w, "user_id is required", http.StatusBadRequest)
+			return
+		}
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid user_id", http.StatusBadRequest)
+			return
+		}
+
+		fileIDStr := r.URL.Query().Get("file_id")
+		if fileIDStr == "" {
+			http.Error(w, "file_id is required", http.StatusBadRequest)
+			return
+		}
+
+		fileID, err := uuid.Parse(fileIDStr)
+		if err != nil {
+			http.Error(w, "invalid file_id", http.StatusBadRequest)
+			return
+		}
+
+		// Log incoming download request
+		log.Printf("download request: user=%d file=%s", userID, fileID.String())
+
+		// Load file and its vault
+		var file File
+		if err := db.Preload("Vault").Where("id = ?", fileID).First(&file).Error; err != nil {
+			log.Printf("download error: file not found %s", fileID.String())
+			http.Error(w, "file not found", http.StatusBadRequest)
+			return
+		}
+
+		// Check ownership
+		if file.Vault.UserId != userID {
+			http.Error(w, "file not found or not owned by user", http.StatusBadRequest)
+			return
+		}
+
+		bucket := fmt.Sprintf("user-%d", userID)
+
+		// Generate presigned URL. If client indicates emulator signing via
+		// ?emulator=1, create a temporary minio client that signs URLs using
+		// the emulator host (10.0.2.2:9000) so the Android emulator can fetch
+		// the object without signature mismatch.
+		var presignedURL *url.URL
+		if r.URL.Query().Get("emulator") == "1" {
+			tmpClient, err2 := minio.New("10.0.2.2:9000", &minio.Options{
+				Creds:  credentials.NewStaticV4(cfg.MinioKey, cfg.MinioSecret, ""),
+				Secure: false,
+			})
+			if err2 != nil {
+				log.Printf("download error: failed to create temp minio client: %v", err2)
+				http.Error(w, "failed to generate file URL", http.StatusInternalServerError)
+				return
+			}
+			pres, err2 := tmpClient.PresignedGetObject(context.Background(), bucket, file.MinioKey, 24*time.Hour, nil)
+			if err2 != nil {
+				log.Printf("download error: presign failed for %s (emulator): %v", file.MinioKey, err2)
+				http.Error(w, "failed to generate file URL: "+err2.Error(), http.StatusInternalServerError)
+				return
+			}
+			presignedURL = pres
+		} else {
+			pres, err2 := minioClient.PresignedGetObject(context.Background(), bucket, file.MinioKey, 24*time.Hour, nil)
+			if err2 != nil {
+				log.Printf("download error: presign failed for %s: %v", file.MinioKey, err2)
+				http.Error(w, "failed to generate file URL: "+err2.Error(), http.StatusInternalServerError)
+				return
+			}
+			presignedURL = pres
+		}
+
+		log.Printf("download success: user=%d file=%s url=%s", userID, fileID.String(), presignedURL.String())
+		resp := map[string]string{"url": presignedURL.String()}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
+	}
+}
+
+// StreamFileHandler streams object bytes from MinIO through the server.
+// This allows the client to fetch file bytes with Authorization headers
+// without requiring presigned URLs.
+func StreamFileHandler(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userIDStr := r.URL.Query().Get("user_id")
+		if userIDStr == "" {
+			http.Error(w, "user_id is required", http.StatusBadRequest)
+			return
+		}
+		userID, err := strconv.ParseInt(userIDStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid user_id", http.StatusBadRequest)
+			return
+		}
+
+		fileIDStr := r.URL.Query().Get("file_id")
+		if fileIDStr == "" {
+			http.Error(w, "file_id is required", http.StatusBadRequest)
+			return
+		}
+		fileID, err := uuid.Parse(fileIDStr)
+		if err != nil {
+			http.Error(w, "invalid file_id", http.StatusBadRequest)
+			return
+		}
+
+		thumb := r.URL.Query().Get("thumbnail") == "1" || r.URL.Query().Get("thumb") == "1"
+
+		// Load file and its vault
+		var file File
+		if err := db.Preload("Vault").Where("id = ?", fileID).First(&file).Error; err != nil {
+			log.Printf("stream error: file not found %s", fileID.String())
+			http.Error(w, "file not found", http.StatusBadRequest)
+			return
+		}
+
+		// Check ownership
+		if file.Vault.UserId != userID {
+			http.Error(w, "file not found or not owned by user", http.StatusBadRequest)
+			return
+		}
+
+		bucket := fmt.Sprintf("user-%d", userID)
+		objectKey := file.MinioKey
+		if thumb && file.Thumbnail != "" {
+			objectKey = file.Thumbnail
+		}
+
+		// Fetch object from MinIO
+		obj, err := minioClient.GetObject(context.Background(), bucket, objectKey, minio.GetObjectOptions{})
+		if err != nil {
+			log.Printf("stream error: failed to get object %s: %v", objectKey, err)
+			http.Error(w, "failed to fetch file", http.StatusInternalServerError)
+			return
+		}
+
+		// Read content (small thumbnails expected); for large files consider streaming
+		data, err := io.ReadAll(obj)
+		if err != nil {
+			log.Printf("stream error: read object %s: %v", objectKey, err)
+			http.Error(w, "failed to read file", http.StatusInternalServerError)
+			return
+		}
+
+		ct := http.DetectContentType(data)
+		w.Header().Set("Content-Type", ct)
+		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(data)))
+
+		log.Printf("stream file: user=%d file=%s thumb=%t key=%s size=%d", userID, fileID.String(), thumb, objectKey, len(data))
+		if _, err := w.Write(data); err != nil {
+			log.Printf("stream error: write response: %v", err)
+		}
 	}
 }
 
@@ -361,7 +577,7 @@ func GetVaultThumbnail(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc 
 // @Success 201 {object} File
 // @Failure 400 {string} string
 // @Router /files/upload [post]
-func UploadFileHandler(db *gorm.DB, minioClient *minio.Client ) http.HandlerFunc {
+func UploadFileHandler(db *gorm.DB, minioClient *minio.Client) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// Parse multipart form (max 32MB)
 		err := r.ParseMultipartForm(32 << 20)
@@ -455,7 +671,6 @@ func UploadFileHandler(db *gorm.DB, minioClient *minio.Client ) http.HandlerFunc
 				contentType = "application/octet-stream"
 			}
 		}
-
 
 		// Validate it's an image
 		// if !isImageContentType(contentType) {
@@ -553,7 +768,7 @@ func RegisterDeviceHandler(db *gorm.DB) http.HandlerFunc {
 		}
 
 		deviceInput := Device{
-			Name: input.Name,
+			Name:   input.Name,
 			UserID: input.UserID,
 		}
 
@@ -698,13 +913,12 @@ func VerifyOTPHandler(db *gorm.DB, jwtSecret string) http.HandlerFunc {
 			http.Error(w, "invalid JSON body", http.StatusBadRequest)
 			return
 		}
-		
+
 		var user User
 		if err := db.Where("email = ?", req.Email).First(&user).Error; err != nil {
 			http.Error(w, "invalid email", http.StatusUnauthorized)
 			return
 		}
-
 
 		// Verify OTP
 		if err := VerifyOTP(userOTPKey(user.ID), req.OTP); err != nil {
@@ -723,7 +937,7 @@ func VerifyOTPHandler(db *gorm.DB, jwtSecret string) http.HandlerFunc {
 		response := VerifyOTPResponse{
 			Token:  token,
 			UserID: user.ID,
-			Name: user.Name,
+			Name:   user.Name,
 			Email:  user.Email,
 		}
 

@@ -2,9 +2,9 @@ package internal
 
 import (
 	"time"
+
 	"github.com/google/uuid"
 )
-
 
 // Defining the api payloads
 
@@ -16,16 +16,16 @@ type UserInput struct {
 }
 
 type VaultInput struct {
-	Name     string 
-	Type    string 
-	UserID int64
+	Name   string `json:"name"`
+	Type   string `json:"type"`
+	UserID int64  `json:"userID"`
 }
 
 type VaultResponse struct {
-	ID		uuid.UUID
-	Name     string 
-	Type    string 
-	UserID int64
+	ID     uuid.UUID `json:"id"`
+	Name   string    `json:"name"`
+	Type   string    `json:"type"`
+	UserID int64     `json:"userId"`
 }
 
 // UserResponse is returned after user creation without nested relations.
@@ -43,9 +43,9 @@ type VerifyUserRegistrationRequest struct {
 	OTP   string `json:"otp"`
 }
 
-type DeviceInput struct{
-	Name		string
-	UserID		int64
+type DeviceInput struct {
+	Name   string
+	UserID int64
 }
 
 // LoginRequest represents the login request body
@@ -62,8 +62,8 @@ type LoginResponse struct {
 
 // VerifyOTPRequest represents the OTP verification request
 type VerifyOTPRequest struct {
-	Email string  `json:"email"`
-	OTP    string `json:"otp"`
+	Email string `json:"email"`
+	OTP   string `json:"otp"`
 }
 
 // VerifyOTPResponse represents the OTP verification response with JWT token
@@ -71,24 +71,24 @@ type VerifyOTPResponse struct {
 	Token  string `json:"token"`
 	UserID int64  `json:"user_id"`
 	Email  string `json:"email"`
-	Name	string
+	Name   string
 }
 
-// Thumbnail for vaults 
+// Thumbnail for vaults
 type Thumbnail struct {
-	FileID				uuid.UUID
-	ThumbnailURL		string
-	Name				string
+	FileID       uuid.UUID
+	ThumbnailURL string
+	Key          string
+	Name         string
 }
 
 type ThumbnailDate struct {
-	Date time.Time
-	Objects	[]Thumbnail
+	Date    time.Time
+	Objects []Thumbnail
 }
 
 type ThumbnailResponse struct {
-	UserID		int64
-	VaultID		uuid.UUID
-	Thumbnails	[]ThumbnailDate
+	UserID     int64
+	VaultID    uuid.UUID
+	Thumbnails []ThumbnailDate
 }
-
