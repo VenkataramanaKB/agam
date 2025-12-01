@@ -11,7 +11,9 @@ import (
 
 func SetupRouter(db *gorm.DB, minio *minio.Client, bucketName string, jwtSecret string, cfg *Config) http.Handler {
 	r := chi.NewRouter()
-
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("ok"))
+	})
 	r.Get("/swagger/*", httpSwagger.Handler())
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +36,7 @@ func SetupRouter(db *gorm.DB, minio *minio.Client, bucketName string, jwtSecret 
 		r.Delete("/vaults/delete", DeleteVaultHandler(db))
 		r.Get("/vaults", ListVaultsHandler(db))
 
-		r.Get("/thumbnail", GetVaultThumbnail(db,minio))
+		r.Get("/thumbnail", GetVaultThumbnail(db, minio, cfg))
 
 		// Device routes
 		r.Post("/devices/register", RegisterDeviceHandler(db))
@@ -42,6 +44,10 @@ func SetupRouter(db *gorm.DB, minio *minio.Client, bucketName string, jwtSecret 
 
 		// File routes
 		r.Post("/files/upload", UploadFileHandler(db, minio))
+		// Download file (presigned URL)
+		r.Get("/files/download", GetFileHandler(db, minio, cfg))
+		// Stream file bytes via server (requires Authorization header)
+		r.Get("/files/stream", StreamFileHandler(db, minio))
 		r.Delete("/files/delete", DeleteFileHandler(db, minio))
 	})
 

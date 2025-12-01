@@ -35,5 +35,7 @@ func main() {
 	r := internal.SetupRouter(db, minioClient, cfg.MinioBucket, cfg.JWTSecret, cfg)
 
 	log.Println("Server running on :8080")
-	http.ListenAndServe(":8080", r)
+	if err := http.ListenAndServe("0.0.0.0:8080", r); err != nil {
+		log.Fatal(err)
+	}
 }
