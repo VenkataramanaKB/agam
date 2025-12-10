@@ -12,6 +12,9 @@ import (
 func SetupRouter(db *gorm.DB, minio *minio.Client, bucketName string, jwtSecret string, cfg *Config) http.Handler {
 	r := chi.NewRouter()
 
+	// Apply CORS middleware to all routes
+	r.Use(CORSMiddleware())
+
 	r.Get("/swagger/*", httpSwagger.Handler())
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
