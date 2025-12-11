@@ -8,6 +8,7 @@ interface AuthContextType {
   isAuthenticated: boolean;
   token: string | null;
   userId: number | null;
+  bootstrapped: boolean;
   login: (token: string, userId: number) => void;
   logout: () => void;
 }
@@ -15,9 +16,10 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [token, setToken] = useState<string | null>(null);
-  const [userId, setUserIdState] = useState<number | null>(null);
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [token, setToken] = useState<string | null>(() => (typeof window !== 'undefined' ? getAuthToken() : null));
+  const [userId, setUserIdState] = useState<number | null>(() => (typeof window !== 'undefined' ? getUserId() : null));
+  const [isAuthenticated, setIsAuthenticated] = useState(() => Boolean(typeof window !== 'undefined' && getAuthToken() && getUserId()));
+  const [bootstrapped, setBootstrapped] = useState(false);
   const router = useRouter();
 
   useEffect(() => {
@@ -28,6 +30,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUserIdState(storedUserId);
       setIsAuthenticated(true);
     }
+    setBootstrapped(true);
   }, []);
 
   const login = (newToken: string, newUserId: number) => {
@@ -36,6 +39,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(newToken);
     setUserIdState(newUserId);
     setIsAuthenticated(true);
+    setBootstrapped(true);
   };
 
   const logout = () => {
@@ -43,11 +47,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setToken(null);
     setUserIdState(null);
     setIsAuthenticated(false);
+    setBootstrapped(true);
     router.push('/login');
   };
 
   return (
-    <AuthContext.Provider value={{ isAuthenticated, token, userId, login, logout }}>
+    <AuthContext.Provider value={{ isAuthenticated, token, userId, bootstrapped, login, logout }}>
       {children}
     </AuthContext.Provider>
   );

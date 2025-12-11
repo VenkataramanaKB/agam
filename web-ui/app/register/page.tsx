@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { authAPI } from '@/lib/api';
 import Link from 'next/link';
+import Image from 'next/image';
 
 export default function RegisterPage() {
   const [formData, setFormData] = useState({
@@ -55,11 +56,21 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-xl p-8">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-[#0c0c0c] to-black px-4 py-12 text-white">
+      <div className="max-w-md w-full bg-[#0f0f0f] rounded-2xl border border-[#1c1c1c] shadow-2xl p-8">
         <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-black mb-2">Agam Cloud</h1>
-          <p className="text-black">Create your account</p>
+          <div className="flex justify-center">
+            <Image
+              src="/agam.png"
+              alt="Agam Cloud logo"
+              width={96}
+              height={96}
+              className="drop-shadow-lg"
+              priority
+            />
+          </div>
+          <h1 className="text-3xl font-bold text-white mb-2">Agam Cloud</h1>
+          <p className="text-white">Create your account</p>
         </div>
 
         {error && (
@@ -71,7 +82,7 @@ export default function RegisterPage() {
         {step === 'register' ? (
           <form onSubmit={handleRegister} className="space-y-6">
             <div>
-              <label htmlFor="name" className="block text-sm font-medium text-black mb-2">
+              <label htmlFor="name" className="block text-sm font-medium text-white mb-2">
                 Full Name
               </label>
               <input
@@ -81,12 +92,12 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="John Doe"
+                
               />
             </div>
 
             <div>
-              <label htmlFor="email" className="block text-sm font-medium text-black mb-2">
+              <label htmlFor="email" className="block text-sm font-medium text-white mb-2">
                 Email
               </label>
               <input
@@ -96,12 +107,12 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="you@example.com"
+                
               />
             </div>
 
             <div>
-              <label htmlFor="phone" className="block text-sm font-medium text-black mb-2">
+              <label htmlFor="phone" className="block text-sm font-medium text-white mb-2">
                 Phone Number
               </label>
               <input
@@ -111,12 +122,12 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="9199990000"
+                
               />
             </div>
 
             <div>
-              <label htmlFor="password" className="block text-sm font-medium text-black mb-2">
+              <label htmlFor="password" className="block text-sm font-medium text-white mb-2">
                 Password
               </label>
               <input
@@ -126,7 +137,7 @@ export default function RegisterPage() {
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                placeholder="••••••••"
+              
               />
             </div>
 
@@ -141,10 +152,10 @@ export default function RegisterPage() {
         ) : (
           <form onSubmit={handleVerifyOTP} className="space-y-6">
             <div>
-              <p className="text-sm text-black mb-4">
+              <p className="text-sm text-white mb-4">
                 We've sent an OTP to {formData.email}. Please enter it below.
               </p>
-              <label htmlFor="otp" className="block text-sm font-medium text-black mb-2">
+              <label htmlFor="otp" className="block text-sm font-medium text-white mb-2">
                 OTP
               </label>
               <input
@@ -154,7 +165,7 @@ export default function RegisterPage() {
                 onChange={(e) => setOtp(e.target.value)}
                 required
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-center text-2xl tracking-widest"
-                placeholder="000000"
+                
                 maxLength={6}
               />
             </div>
@@ -178,7 +189,7 @@ export default function RegisterPage() {
         )}
 
         <div className="mt-6 text-center">
-          <p className="text-sm text-black">
+          <p className="text-sm text-white">
             Already have an account?{' '}
             <Link href="/login" className="text-blue-600 hover:text-blue-700 font-medium">
               Sign in

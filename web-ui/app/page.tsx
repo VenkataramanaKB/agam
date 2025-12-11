@@ -16,10 +16,10 @@ export default function Home() {
   }, [isAuthenticated, router]);
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-black via-[#0c0c0c] to-black px-4 py-12 text-white">
       <div className="text-center max-w-2xl px-4">
-        <h1 className="text-5xl font-bold text-black mb-4">Agam Cloud</h1>
-        <p className="text-xl text-black mb-8">
+        <h1 className="text-5xl font-bold text-white mb-4">Agam Cloud</h1>
+        <p className="text-xl text-white mb-8">
           Your self-hosted cloud storage platform. Private, secure, and entirely under your control.
         </p>
         <div className="flex gap-4 justify-center">
